@@ -17,7 +17,7 @@ class OrdersRepository implements IOrdersRepository {
       order_products: products,
     });
 
-    await this.ormRepository.save(customer);
+    await this.ormRepository.save(order);
 
     return order;
   }

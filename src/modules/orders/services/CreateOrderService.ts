@@ -41,26 +41,63 @@ class CreateOrderService {
       products,
     );
 
+    if (!existentProducts.length) {
+      throw new AppError('Could not find any products with the given ids.');
+    }
+
+    const existentProductsIds = existentProducts.map(product => product.id);
+
+    const inexistentProducts = products.filter(
+      product => !existentProductsIds.includes(product.id),
+    );
+
+    if (inexistentProducts.length) {
+      throw new AppError(`Could not find product ${inexistentProducts[0].id}`);
+    }
+
     if (existentProducts.length !== products.length) {
       throw new AppError('Products not found.');
     }
 
-    const formattedProducts = products.map(product => {
-      const foundExistentProducts = existentProducts.filter(
-        foundExistentProduct => foundExistentProduct.id === product.id,
-      );
+    products.forEach(product => {
+      const existentProduct = existentProducts.filter(
+        findExistentProduct => findExistentProduct.id === product.id,
+      )[0];
 
-      return {
-        product_id: product.id,
-        quantity: product.quantity,
-        price: foundExistentProducts[0].price,
-      };
+      if (product.quantity > existentProduct?.quantity) {
+        throw new AppError(
+          `The quantity ${product.quantity} is not available for ${product.id}.`,
+        );
+      }
     });
+
+    const formattedProducts = products.map(product => ({
+      product_id: product.id,
+      quantity: product.quantity,
+      price: existentProducts.filter(
+        existentProduct => existentProduct.id === product.id,
+      )[0].price,
+    }));
 
     const order = await this.ordersRepository.create({
       customer,
       products: formattedProducts,
     });
+
+    const { order_products } = order;
+
+    const orderedProductsQuantity = order_products.map(product => {
+      const existentProduct = existentProducts.filter(
+        findExistentProduct => findExistentProduct.id === product.product_id,
+      )[0];
+
+      return {
+        id: product.product_id,
+        quantity: existentProduct.quantity - product.quantity,
+      };
+    });
+
+    await this.productsRepository.updateQuantity(orderedProductsQuantity);
 
     return order;
   }
